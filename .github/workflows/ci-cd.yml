@@ -3,12 +3,12 @@ name: CI/CD Backend Staging
 on:
   push:
     branches:
-      - stg
+      - "*"
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
-    environment: Staging
+    environment: Production
 
     steps:
       - name: 📦 Checkout Code
