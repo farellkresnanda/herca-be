@@ -19,7 +19,7 @@ RUN apt-get update && apt-get install -y \
     git \
     curl \
     libpng-dev \
-    libonig-dev \
+    libonib-dev \
     libxml2-dev \
     zip \
     unzip
@@ -46,9 +46,14 @@ COPY . /var/www
 # Copy vendor directory from vendor stage
 COPY --from=vendor /app/vendor/ /var/www/vendor/
 
-# Generate key and optimize
-RUN php artisan key:generate
-RUN php artisan optimize:clear
+# Create .env file if not exists and set permissions
+RUN if [ ! -f .env ]; then \
+        cp .env.example .env && \
+        sed -i 's/APP_KEY=/APP_KEY=base64:tempkeyreplaceinproduction/' .env; \
+    fi
+
+# Set proper permissions
+RUN chmod -R 777 storage bootstrap/cache
 
 # Expose port 9000 for PHP-FPM
 EXPOSE 9000
