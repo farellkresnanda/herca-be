@@ -1,13 +1,14 @@
-name: CI/CD Backend Laravel
+name: CI/CD Production Backend
 
 on:
   push:
     branches:
-      - main
+      - "*"
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+    environment: Production
 
     steps:
       - name: 📦 Checkout Code
@@ -16,29 +17,92 @@ jobs:
       - name: 🐳 Docker Login
         run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
 
-      - name: 🛠️ Build Docker Image
+      - name: Build Docker Image
         run: docker build -t ${{ secrets.DOCKER_USERNAME }}/herca-be:latest .
 
-      - name: 📤 Push Docker Image
+      - name: Push Docker Image
         run: docker push ${{ secrets.DOCKER_USERNAME }}/herca-be:latest
 
-      - name: 🚀 Deploy to Server
+      - name: Deploy to Server
         uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.HOST }}
           username: ${{ secrets.USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
+            echo "🔁 Pulling latest Docker image..."
             docker pull ${{ secrets.DOCKER_USERNAME }}/herca-be:latest
+            
+            echo "📦 Pulling MySQL image if not exists..."
+            docker pull mysql:8.0
+            
+            echo "📦 Pulling Nginx image if not exists..."
+            docker pull nginx:alpine
 
-            docker stop herca-be || true
-            docker rm herca-be || true
+            echo "🛑 Stopping and removing existing containers..."
+            docker stop herca-be-app herca-be-mysql herca-be-nginx || true
+            docker rm herca-be-app herca-be-mysql herca-be-nginx || true
 
-            docker run -d \
-              --name herca-be \
-              --restart unless-stopped \
-              -p ${{ secrets.PORT }}:80 \
-              -v ~/herca-be-storage:/var/www/html/storage \
-              ${{ secrets.DOCKER_USERNAME }}/herca-be:latest
+            echo "📁 Creating necessary directories..."
+            mkdir -p ~/herca-be/storage
+            mkdir -p ~/herca-be/docker/nginx
 
+            echo "📝 Creating .env file..."
+            cat > ~/herca-be/.env << 'EOF'
+            APP_NAME=HercaBackend
+            APP_ENV=production
+            APP_KEY=${{ secrets.APP_KEY }}
+            APP_DEBUG=false
+            APP_URL=https://herca.be.kresnansite.my.id
+
+            DB_CONNECTION=mysql
+            DB_HOST=mysql
+            DB_PORT=3306
+            DB_DATABASE=${{ secrets.DB_DATABASE }}
+            DB_USERNAME=${{ secrets.DB_USERNAME }}
+            DB_PASSWORD=${{ secrets.DB_PASSWORD }}
+
+            # Other environment variables...
+            EOF
+
+            echo "📝 Creating Nginx config..."
+            cat > ~/herca-be/docker/nginx/app.conf << 'EOF'
+            server {
+                listen 80;
+                index index.php index.html;
+                server_name herca.be.kresnansite.my.id;
+                root /var/www/public;
+
+                location / {
+                    try_files $uri $uri/ /index.php?$query_string;
+                }
+
+                location ~ \.php$ {
+                    try_files $uri =404;
+                    fastcgi_split_path_info ^(.+\.php)(/.+)$;
+                    fastcgi_pass app:9000;
+                    fastcgi_index index.php;
+                    include fastcgi_params;
+                    fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+                    fastcgi_param PATH_INFO $fastcgi_path_info;
+                }
+
+                location ~ /\.ht {
+                    deny all;
+                }
+
+                error_log /var/log/nginx/error.log;
+                access_log /var/log/nginx/access.log;
+            }
+            EOF
+
+            echo "🚀 Starting containers..."
+            docker-compose -f ~/herca-be/docker-compose.yml up -d
+
+            echo "🔧 Running Laravel setup commands..."
+            docker exec herca-be-app php artisan optimize:clear
+            docker exec herca-be-app php artisan migrate --force
+            docker exec herca-be-app php artisan storage:link
+
+            echo "🧹 Cleaning up unused Docker resources..."
             docker system prune -f

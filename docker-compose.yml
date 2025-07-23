@@ -2,29 +2,59 @@ version: '3.8'
 
 services:
   app:
-    build: .
-    container_name: herca-be
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: kresnansite/herca-be:latest
+    container_name: herca-be-app
+    restart: unless-stopped
+    working_dir: /var/www
+    volumes:
+      - ./:/var/www
+      - ./storage:/var/www/storage
+    environment:
+      - APP_ENV=production
+      - APP_DEBUG=false
+      - APP_URL=https://herca.be.kresnansite.my.id
+      - DB_HOST=mysql
+      - DB_PORT=3306
+      - DB_DATABASE=${DB_DATABASE}
+      - DB_USERNAME=${DB_USERNAME}
+      - DB_PASSWORD=${DB_PASSWORD}
+    networks:
+      - herca-network
+
+  mysql:
+    image: mysql:8.0
+    container_name: herca-be-mysql
+    restart: unless-stopped
+    environment:
+      - MYSQL_DATABASE=${DB_DATABASE}
+      - MYSQL_USER=${DB_USERNAME}
+      - MYSQL_PASSWORD=${DB_PASSWORD}
+      - MYSQL_ROOT_PASSWORD=${DB_ROOT_PASSWORD}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - herca-network
+
+  nginx:
+    image: nginx:alpine
+    container_name: herca-be-nginx
     restart: unless-stopped
     ports:
       - "3004:80"
     volumes:
-      - .:/var/www/html
-    environment:
-      - APP_ENV=production
-      - DB_HOST=db
-      - DB_PORT=3306
-      - DB_DATABASE=herca
-      - DB_USERNAME=root
-      - DB_PASSWORD=root
+      - ./:/var/www
+      - ./docker/nginx:/etc/nginx/conf.d
     depends_on:
-      - db
+      - app
+    networks:
+      - herca-network
 
-  db:
-    image: mysql:8.0
-    container_name: herca-db
-    restart: unless-stopped
-    ports:
-      - "3307:3306"
-    environment:
-      MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: herca
+volumes:
+  mysql_data:
+
+networks:
+  herca-network:
+    driver: bridge

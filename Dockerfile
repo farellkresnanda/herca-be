@@ -1,27 +1,57 @@
-FROM php:8.2-apache
+# Stage 1: Build composer dependencies
+FROM composer:2.6 as vendor
+
+WORKDIR /app
+COPY database/ database/
+COPY composer.json composer.lock ./
+RUN composer install \
+    --ignore-platform-reqs \
+    --no-interaction \
+    --no-plugins \
+    --no-scripts \
+    --prefer-dist
+
+# Stage 2: Build the application
+FROM php:8.2-fpm
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
-    git curl unzip zip libpng-dev libonig-dev libxml2-dev libzip-dev \
-    && docker-php-ext-install pdo pdo_mysql mbstring zip exif
+    git \
+    curl \
+    libpng-dev \
+    libonig-dev \
+    libxml2-dev \
+    zip \
+    unzip
 
-# Install Composer
-COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
+# Clear cache
+RUN apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Aktifkan mod_rewrite Laravel
-RUN a2enmod rewrite
+# Install PHP extensions
+RUN docker-php-ext-install pdo_mysql mbstring exif pcntl bcmath gd
+
+# Install Node.js
+RUN curl -sL https://deb.nodesource.com/setup_16.x | bash -
+RUN apt-get install -y nodejs
+
+# Copy composer.lock and composer.json
+COPY composer.lock composer.json /var/www/
 
 # Set working directory
-WORKDIR /var/www/html
+WORKDIR /var/www
 
-# Copy project file
-COPY . .
+# Copy existing application directory contents
+COPY . /var/www
 
-# Install dependensi Laravel
-RUN composer install --no-dev --optimize-autoloader
+# Copy vendor directory from vendor stage
+COPY --from=vendor /app/vendor/ /var/www/vendor/
 
-# Set permission
-RUN chown -R www-data:www-data /var/www/html
+# Generate key and optimize
+RUN php artisan key:generate
+RUN php artisan optimize:clear
 
-# Copy konfigurasi Apache
-COPY ./nginx/herca-be.conf /etc/apache2/sites-available/000-default.conf
+# Expose port 9000 for PHP-FPM
+EXPOSE 9000
+
+# Start PHP-FPM
+CMD ["php-fpm"]
