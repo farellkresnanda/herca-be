@@ -12,6 +12,10 @@ RUN a2enmod rewrite
 # Set working directory
 WORKDIR /var/www/html
 
+# Ganti default DocumentRoot Apache ke folder public Laravel
+RUN sed -i 's|/var/www/html|/var/www/html/public|g' /etc/apache2/sites-available/000-default.conf
+
+
 # Copy semua file Laravel ke dalam container
 COPY . .
 
