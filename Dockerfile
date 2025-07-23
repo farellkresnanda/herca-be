@@ -1,62 +1,40 @@
-# Stage 1: Build composer dependencies
-FROM composer:2.6 as vendor
+# Stage 1: Build
+FROM composer:2 as builder
 
 WORKDIR /app
-COPY database/ database/
-COPY composer.json composer.lock ./
-RUN composer install \
-    --ignore-platform-reqs \
-    --no-interaction \
-    --no-plugins \
-    --no-scripts \
-    --prefer-dist
+COPY . .
+RUN composer install --no-dev --optimize-autoloader
 
-# Stage 2: Build the application
-FROM php:8.2-fpm
+# Stage 2: Runtime
+FROM php:8.2-fpm-alpine
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    git \
-    curl \
-    libpng-dev \
-    libonib-dev \
-    libxml2-dev \
+WORKDIR /var/www/html
+
+# Install dependencies
+RUN apk add --no-cache \
+    nginx \
+    supervisor \
+    libzip-dev \
     zip \
-    unzip
-
-# Clear cache
-RUN apt-get clean && rm -rf /var/lib/apt/lists/*
+    unzip \
+    mysql-client
 
 # Install PHP extensions
-RUN docker-php-ext-install pdo_mysql mbstring exif pcntl bcmath gd
+RUN docker-php-ext-install pdo pdo_mysql zip
 
-# Install Node.js
-RUN curl -sL https://deb.nodesource.com/setup_16.x | bash -
-RUN apt-get install -y nodejs
+# Copy built files from builder
+COPY --from=builder /app /var/www/html
+COPY . /var/www/html
 
-# Copy composer.lock and composer.json
-COPY composer.lock composer.json /var/www/
+# Copy configuration files
+COPY docker/nginx.conf /etc/nginx/nginx.conf
+COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
-# Set working directory
-WORKDIR /var/www
+# Set permissions
+RUN chown -R www-data:www-data /var/www/html/storage
+RUN chown -R www-data:www-data /var/www/html/bootstrap/cache
 
-# Copy existing application directory contents
-COPY . /var/www
-
-# Copy vendor directory from vendor stage
-COPY --from=vendor /app/vendor/ /var/www/vendor/
-
-# Create .env file if not exists and set permissions
-RUN if [ ! -f .env ]; then \
-        cp .env.example .env && \
-        sed -i 's/APP_KEY=/APP_KEY=base64:tempkeyreplaceinproduction/' .env; \
-    fi
-
-# Set proper permissions
-RUN chmod -R 777 storage bootstrap/cache
-
-# Expose port 9000 for PHP-FPM
+# Expose port
 EXPOSE 9000
 
-# Start PHP-FPM
-CMD ["php-fpm"]
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]

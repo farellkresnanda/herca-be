@@ -19,7 +19,10 @@ return [
 
     'allowed_methods' => ['*'],
     'paths' => ['api/*', 'sanctum/csrf-cookie'],
-    'allowed_origins' => ['http://localhost:5173'],
+    'allowed_origins' => [
+        'http://herca.fe.kresnansite.my.id',
+        'https://herca.fe.kresnansite.my.id',
+    ],
 
 
 
