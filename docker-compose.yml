@@ -5,55 +5,42 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: herca-laravel
-    container_name: herca-be-app
+    container_name: herca-laravel-app
     restart: unless-stopped
-    working_dir: /var/www
     volumes:
       - .:/var/www
     networks:
       - herca-network
     depends_on:
-      - db
+      - mysql
     environment:
-      DB_HOST: db
-      DB_PORT: 3306
-      DB_DATABASE: herca_db
-      DB_USERNAME: root
-      DB_PASSWORD: root
-    ports:
-      - "9000:9000"
+      - DB_HOST=mysql
+      - DB_PORT=3306
+      - DB_DATABASE=herca_db
+      - DB_USERNAME=root
+      - DB_PASSWORD=root
+    expose:
+      - "9000" # hanya expose internal, karena Nginx host yang akan mengakses
 
-  webserver:
-    image: nginx:alpine
-    container_name: herca-be-nginx
-    restart: unless-stopped
-    ports:
-      - "8000:80"
-    volumes:
-      - .:/var/www
-      - ./nginx.conf:/etc/nginx/conf.d/default.conf
-    depends_on:
-      - app
-    networks:
-      - herca-network
-
-  db:
-    image: mysql:8.0
-    container_name: herca-be-db
+  mysql:
+    image: mysql:8
+    container_name: herca-mysql
     restart: unless-stopped
     environment:
       MYSQL_ROOT_PASSWORD: root
       MYSQL_DATABASE: herca_db
-    volumes:
-      - db_data:/var/lib/mysql
+      MYSQL_USER: root
+      MYSQL_PASSWORD: root
     ports:
       - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
     networks:
       - herca-network
 
+volumes:
+  mysql-data:
+
 networks:
   herca-network:
-
-volumes:
-  db_data:
+    driver: bridge
