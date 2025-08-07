@@ -19,8 +19,20 @@ services:
       - DB_DATABASE=herca_db
       - DB_USERNAME=root
       - DB_PASSWORD=root
+
+  nginx:
+    image: nginx:stable-alpine
+    container_name: herca-nginx
+    restart: unless-stopped
     ports:
-      - "3002:9000" # hanya expose internal, karena Nginx host yang akan mengakses
+      - "3002:80"
+    volumes:
+      - .:/var/www
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf
+    networks:
+      - herca-network
+    depends_on:
+      - app
 
   mysql:
     image: mysql:8
@@ -29,8 +41,6 @@ services:
     environment:
       MYSQL_ROOT_PASSWORD: root
       MYSQL_DATABASE: herca_db
-      # MYSQL_USER: root
-      # MYSQL_PASSWORD: root
     ports:
       - "3306:3306"
     volumes:
