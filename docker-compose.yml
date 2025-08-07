@@ -19,8 +19,8 @@ services:
       - DB_DATABASE=herca_db
       - DB_USERNAME=root
       - DB_PASSWORD=root
-    expose:
-      - "9000" # hanya expose internal, karena Nginx host yang akan mengakses
+    ports:
+      - "3002:9000" # hanya expose internal, karena Nginx host yang akan mengakses
 
   mysql:
     image: mysql:8
